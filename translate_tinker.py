@@ -12,6 +12,10 @@ def translate_to_french():
     translated_text.delete("1.0", "end")  # Clear previous translation
     translated_text.insert("end", translation.text)
 
+def clear_text():
+    text_input.delete("1.0", "end")  # Clear input text
+    translated_text.delete("1.0", "end")  # Clear translated text
+
 # Create main window
 root = tk.Tk()
 root.title("English to French Translator")
@@ -23,6 +27,10 @@ text_input.pack(pady=10)
 # Create translate button
 translate_button = tk.Button(root, text="Translate", command=translate_to_french)
 translate_button.pack()
+
+# Create clear button
+clear_button = tk.Button(root, text="Clear", command=clear_text)
+clear_button.pack()
 
 # Create translated text box
 translated_text = tk.Text(root, height=10, width=40)
