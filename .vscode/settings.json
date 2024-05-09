@@ -1,5 +1,10 @@
 {
     "files.associations": {
         "LECTURE-1.C": "cpp"
-    }
+    },
+    "python.testing.pytestArgs": [
+        "ELNC-6060"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }
