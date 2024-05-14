@@ -3,15 +3,17 @@
 int main(void)
 {
 
-    int TemperatureC, Pressure;;
+    float TemperatureC;
 
-    Pressure = 1000;
     TemperatureC = 250;
 
-    float TemperatureF;
+    float TemperatureF, Pressure;
 
     TemperatureF = (TemperatureC * 9.0/5.0) + 32;
+    Pressure = (TemperatureC - TemperatureF) * 0.95;
 
-    printf("The temperature is = %.2f\n",TemperatureF);
+    printf("\n\n\nThe temperature is = %3.2f\n\n",TemperatureF);
+    printf("the temperature is = %3.2f\n\n",TemperatureC);
+    printf("the relation with pressure is = %3.2f\n\n",Pressure);
 
 }
