@@ -2,8 +2,7 @@
 int main(void)
 {
     int row, column, size;
-    printf("enter the size of the triangle: ");
-    scanf("%d", &size);
+    size = 5;
 
     row = size;
     while (row > 0)
