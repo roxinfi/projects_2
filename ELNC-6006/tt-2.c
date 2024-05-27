@@ -12,7 +12,7 @@ int main (void)
     }
 
     printf("Enter the co-ordinates inside 5 to 11 (odd number only): ");
-    scanf("%d",&yplane);
+    scanf("%d",&yplane);a
     while ((yplane<5)||(yplane>11)||(yplane%2==0))
     {
         printf("invliad input, please enter the range again: ");
