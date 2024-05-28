@@ -36,4 +36,3 @@ elif 50<= usergpa <= 54:
     print("Your GPA is 1.0")
 else:
     print("You have failed this course")
-
