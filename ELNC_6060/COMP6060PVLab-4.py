@@ -1,18 +1,23 @@
+# printing the welcome message
 print("Welcome to VRAJ's GPA calculator")
-def getValidUserInput(string, minimumrange, maximumrange):
-    while True:
+
+# Function to get valid user input
+def getValidUserInput(string, minimumrange, maximumrange): 
+    while True: # Loop until a valid input is entered
         userinput = input(string)
-        if not userinput.isnumeric() :
+        if not userinput.isnumeric() : # Check if the input is a number
             print("Value entered was not a number. Exiting...")
             exit(-1)
         value = int(userinput)
-        if value < minimumrange or value > maximumrange:
+        if value < minimumrange or value > maximumrange: # Check if the input is within the range
             print(f"Please enter a value between {minimumrange} and {maximumrange}")
-        else:
+        else: # If the input is valid, return the value
             return value
 
+# Get the user's grades
 usergpa = getValidUserInput("Enter your grades: ", 0, 100)
 
+# Calculate the GPA based on the user's grades
 if 90<= usergpa <= 100:
     print("Your GPA is 4.2")
 elif 80<= usergpa <= 89:
