@@ -1,0 +1,62 @@
+/*
+ ©_FANSHAWE C0LLAGE, 2024, ESD - 3 EMBEDDED SYSTEM DESIGN
+ AUTHOR: PATEL VRAJ (1243437), HARPRIT WADEKAR (1196416); DATE: 2024-06-07
+ MODIFIED BY: NONE
+ DESCRIPTION OF PROGRAM:  toggles a green LED and increments a counter when a 
+ specific switch is pressed, while displaying the counter value on a 
+ set of LEDs with support for resetting the counter by another switch
+ */
+
+#include "mcc_generated_files/mcc.h"
+#define SWITCH_ON           0       
+#define COUNTER_LEDS        LATD    
+#define PUSH_RUN_SWITCH     RUN_SWITCH_GetValue()
+#define PUSH_RESET_SWITCH   RESET_SWITCH_GetValue()
+
+#define GREEN_LED_ON()      GREEN_LED_SetHigh()
+#define GREEN_LED_OFF()     GREEN_LED_SetLow()
+
+#define GREEN_LED_TOGGLE()  GREEN_LED_Toggle()
+
+#define RED_LED_ON()        RED_LED_SetHigh()
+#define RED_LED_OFF()       RED_LED_SetLow()
+
+
+/*
+                         Main application
+ */
+void main(void)
+{
+    // Initialize the device
+    SYSTEM_Initialize();
+    
+    char counter;
+    counter = 0;
+    
+    while (1)
+    {
+        if (PUSH_RUN_SWITCH == SWITCH_ON)
+        {
+            GREEN_LED_ON();
+            RED_LED_OFF();
+            counter++;
+        }
+        else
+        {
+            GREEN_LED_OFF();
+            RED_LED_ON();
+        }
+        
+        if (PUSH_RESET_SWITCH == SWITCH_ON)
+        {
+            counter = 0;
+        }
+        
+        COUNTER_LEDS = ~counter;
+        
+        __delay_ms(100);
+    }
+}
+/**
+ End of File
+*/
