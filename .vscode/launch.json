@@ -84,8 +84,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/vrajp/projects/my_project_2/ELNC_6006",
-      "program": "c:/Users/vrajp/projects/my_project_2/ELNC_6006/build/Debug/outDebug",
+      "cwd": "c:/Users/vrajp/projects/my_project_2/ELNC_6060",
+      "program": "c:/Users/vrajp/projects/my_project_2/ELNC_6060/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [

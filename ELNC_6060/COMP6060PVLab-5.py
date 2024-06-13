@@ -7,10 +7,10 @@ numValueStr = input("Enter the number of values to generate between 1 and 50: ")
 numValue = int(numValueStr)
 
 # Function to get valid user input
-def getValidUserInput(string, minimumrange, maximumrange): 
+def getValidUserInput(string, minimumrange, maximumrange):
+        
         #  Loop until a valid input is entered
-        while True: 
-            string = numValueStr
+        while True:
             if not string.isnumeric() : # Check if the input is a number
                 print("Value entered was not a number. Exiting...")
                 exit()
@@ -19,11 +19,13 @@ def getValidUserInput(string, minimumrange, maximumrange):
             # Check if the input is within the range
             if num < minimumrange or num > maximumrange: 
                 print(f"Please enter a value between {minimumrange} and {maximumrange}")
+                string = input("Enter the number of values to generate between 1 and 50: ")
             # If the input is valid, generate the random numbers, print them and exit the loop
+
             else:
-                for num in range(0, numValue):
+                for i in range(0, num):
                     randomVal = int(random() * 100)
-                    print(f'{num+1} : {randomVal}')
+                    print(f'{i+1} : {randomVal}')
                 break
 
 # Call the function to get valid user input
