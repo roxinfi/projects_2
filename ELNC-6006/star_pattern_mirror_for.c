@@ -7,23 +7,16 @@ int main(void)
     int space;
     size = 5;
 
-
-    row = size;
-    while(row>0)
+    for(row=0;row<size;row++)
     {
-        space = size - row;
-        while(space>0)
+        for(space = size - row - 1;space>0;space--)
         {
             printf(" ");
-            space--;
         }
-        collumn = 0;
-        while(collumn<=row-1)
+        for(collumn=0;collumn<=row;collumn++)
         {
             printf("*");
-            collumn++;
         }
         printf("\n");
-        row--;
     }
 }
