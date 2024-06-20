@@ -30,8 +30,5 @@ for line in file_to_search:
 # Close the file
 file_to_search.close()
 
-# Build a formatted string with the results
-result_string = f"{word_to_find} was found in {file_path}: {counter} times"
+print(f"{word_to_find} was found in {file_path}: {counter} times")
 
-# Print the formatted string to console
-print(result_string)
