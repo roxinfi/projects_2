@@ -8,18 +8,22 @@ int main(void)
     size = 5;
 
 
-    row = 0;
-    while(row<size)
+    row = size;
+    while(row>0)
     {
         space = size - row;
-        collumn = 0;
-        while(space<collumn)
+        while(space>0)
         {
             printf(" ");
+            space--;
         }
-        printf("*");
-        collumn++;
+        collumn = 0;
+        while(collumn<=row-1)
+        {
+            printf("*");
+            collumn++;
+        }
         printf("\n");
-        row++;
+        row--;
     }
 }
