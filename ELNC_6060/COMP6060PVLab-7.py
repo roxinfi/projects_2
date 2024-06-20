@@ -31,4 +31,3 @@ for line in file_to_search:
 file_to_search.close()
 
 print(f"{word_to_find} was found in {file_path}: {counter} times")
-
