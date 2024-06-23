@@ -1,0 +1,72 @@
+#include "mcc_generated_files/mcc.h"
+#define SWITCH_ON 0
+#define LEDS LATB
+
+
+    
+void pattern1(void)
+{
+    LED_3_Toggle();
+    LED_2_SetLow();
+    LED_1_SetLow();
+    LED_0_SetLow();
+}
+
+void pattern2(void)
+{
+    LED_3_SetHigh();
+    LED_2_SetHigh();
+    LED_1_SetHigh();
+    LED_0_SetHigh();
+}
+
+void main(void)
+{
+    SYSTEM_Initialize();
+    char counter;
+    counter = 0;
+    char state;
+    state = 0;
+    char logic;
+    logic = 0;
+    
+   
+
+    while (1)
+    {
+        __delay_ms(250);
+        if(SWITCH_2_GetValue()==SWITCH_ON)
+        {
+            YELLOW_LED_SetHigh();
+        }
+        else
+        {
+            YELLOW_LED_SetLow();
+        }
+        if(SWITCH_3_GetValue()==SWITCH_ON)
+        {
+            GREEN_LED_Toggle();
+        }
+        if ((SWITCH_3_GetValue()==SWITCH_ON)&&(SWITCH_2_GetValue()==SWITCH_ON))
+        {
+            if(counter == 6)
+            {
+                pattern1();
+                //logic = (logic)&(0x08);
+                //LEDS = logic;
+                //logic = ~(logic);
+                //logic = (logic)|(0x07);
+                counter = 0;
+            }
+            
+            counter++;
+        }
+        else
+            {
+            pattern2();
+            }
+    }
+}
+/**
+ End of File
+*/
