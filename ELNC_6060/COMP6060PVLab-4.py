@@ -7,7 +7,7 @@ def getValidUserInput(string, minimumrange, maximumrange):
         userinput = input(string)
         if not userinput.isnumeric() : # Check if the input is a number
             print("Value entered was not a number. Exiting...")
-            exit(-1)
+            exit()
         value = int(userinput)
         if value < minimumrange or value > maximumrange: # Check if the input is within the range
             print(f"Please enter a value between {minimumrange} and {maximumrange}")

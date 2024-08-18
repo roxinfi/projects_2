@@ -11,7 +11,6 @@ plt.title("VRAJ's ADC Module Performance Comparison")
 plt.xlabel("seconds")
 plt.ylabel("ADC resolution")
 plt.xlim(1, 12)
-plt.axis
 plt.ylim(0, 1023)
 
 # Plot data lines

@@ -23,4 +23,4 @@ minutes = remainder // 60
 seconds = remainder % 60
 
 # Printing the results in the specified format of Days: Hours: Minutes: Seconds
-print(f"{total_seconds} is equivalent to {days} days {hours:02}:{minutes:02}:{seconds:02}")
+print(f"{total_seconds} seconds is equivalent to {days} days {hours:02}:{minutes:02}:{seconds:02}")

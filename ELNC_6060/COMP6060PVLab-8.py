@@ -34,6 +34,7 @@ with open(file_path, 'r') as file:
             else:
                 log = f"{sensor_name} is not supported"
                 print(log)
+file.close()
 
 # Calculate the averages
 tempAvg = tempSum / tempNum 

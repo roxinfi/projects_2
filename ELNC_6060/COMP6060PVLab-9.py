@@ -5,8 +5,7 @@ print("Welcome to VRAJ's number analyzer!")
 
 # Creating the dataset
 dataset = { "radii": [5.5, 6.3],
-            "angles": [56, 180, 320, 15, 90]
-          }
+            "angles": [56, 180, 320, 15, 90]}
 
 # Prompt user for number set to analyze
 print("Select a set of numbers to analyze:")
