@@ -3,7 +3,7 @@
 
 char gibberish[50] = "abc123xyzzzz56pqrtttuuvv77aaaopmmnnmqqx";
 
-int repart()
+void repart(void)
 {
     int count = 0;
     char input;
