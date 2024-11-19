@@ -1,0 +1,61 @@
+ORG 0H          ; Starting address of the program
+
+START:
+    ACALL UART_Init         ; Initialize UART
+    ACALL UART_PrintString  ; Print the string "Hello, 8051!"
+    
+    ; Print an integer (e.g., 123)
+    MOV A, #123             ; Load integer value 123 into accumulator
+    ACALL PrintInteger      ; Print the integer as a decimal number
+
+    NOP                     ; Do nothing (infinite loop)
+    SJMP START              ; Loop to start again
+
+; Initialize UART for 9600 baud rate at 11.0592 MHz
+UART_Init:
+    MOV TMOD, #20H          ; Timer 1 in mode 2 (8-bit auto-reload)
+    MOV TH1, #-3            ; Load TH1 for 9600 baud rate
+    MOV TL1, #-3            ; Load TL1 for 9600 baud rate
+    SETB TR1                ; Start Timer 1
+    SETB SCON               ; Set serial mode (mode 1: 8-bit UART)
+    SETB ES                 ; Enable serial interrupt (optional)
+    RET
+
+; Send a single character through UART
+UART_Send:
+    MOV SBUF, A             ; Load character to SBUF register
+WaitForTx:
+    JNB TI, WaitForTx       ; Wait for the transmission to complete (check TI flag)
+    CLR TI                  ; Clear the transmit interrupt flag
+    RET
+
+; Print a null-terminated string over UART
+UART_PrintString:
+    MOV R0, #STRING         ; Point to the string
+PrintStringLoop:
+    MOV A, @R0              ; Load the character from string into A
+    INC R0                  ; Move to next character in string
+    ORL A, A                ; Check if it's the null-terminator (end of string)
+    JZ DonePrintString      ; If null, end of string
+    ACALL UART_Send         ; Otherwise, send the character
+    SJMP PrintStringLoop    ; Continue with the next character
+DonePrintString:
+    RET
+
+; Print an integer in decimal (assumes 8-bit values for simplicity)
+PrintInteger:
+    MOV B, 10               ; Set divisor for decimal (base 10)
+    MOV R2, #0              ; Clear R2 (will hold the result)
+    MOV R1, A               ; Copy the integer to R1 (to divide it)
+DivideLoop:
+    DIV AB                   ; Divide A by B, result in A, remainder in B
+    ADD A, #30H             ; Convert remainder to ASCII (adding '0' for digits)
+    ACALL UART_Send         ; Send the character
+    MOV A, R1               ; Load the quotient back into A
+    JNZ DivideLoop          ; If quotient is not zero, continue dividing
+
+    RET
+
+STRING:  DB 'Hello, 8051! ', 0  ; Null-terminated string
+
+END
