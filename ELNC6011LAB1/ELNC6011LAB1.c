@@ -36,9 +36,27 @@
 #define FALSE	0
 #define TMR0FLAG    INTCONbits.TMR0IF // Timer 0 flag
 #define PRESENTCOUNT 3036 // Preset count for Timer 0
+#define SAMPLE_SIZE 10 // Number of samples to be taken
+#define SENSORCOUNT 3 // Number of sensors
+#define ON 0xFF
+#define OFF 0x00
+
 
 
 // Global Variables  ==========================================================
+
+typedef struct
+{
+    int sample[SAMPLE_SIZE]; // Array to store samples
+    int insert; // Index for inserting new sample
+    int avgReady; // Flag to indicate if average is ready
+    int Llimit; // Lower limit for sensor
+    int Hlimit; // Upper limit for sensor
+    int average; // Average of samples
+} sensor_t;
+
+sensor_t sensorCh[SENSORCOUNT]; // Array of sensor structures
+sensor_t *sensorChPtr; // Pointer to sensor structure
 
 // Functions  =================================================================
 
@@ -52,7 +70,7 @@ Desc:		This function will configure internal oscillator of PIC18F45K22 to
 Input: 		None.
 Returns:	None.
  ============================================================================*/
-void oscConfig(void)
+void OSConfig(void)
 {
 	OSCCON = 0x52; 
 	while(!OSCCONbits.HFIOFS);
@@ -135,7 +153,7 @@ Returns:	None.
 void configTMR0(int setcount)
 {
 	resetTMR0(setcount);
-	T0CON = 0x92;
+	T0CON = 0x91;
 } // eo configTMR0::
 
 
@@ -159,6 +177,47 @@ int getADCSample(char adcChnl)
 } // eo getADCSample::
 
 
+/*>>> InitializeSensor: ========================================
+Author:		Vraj Patel
+Date:		05/13/2025
+Modified:	None
+Desc:		This function will calculate the average of the samples taken from the sensor.
+Input: 		sensorCh_t *sensorCh, pointer to the sensor channel structure.
+Returns:	int, the average of the samples.
+ ============================================================================*/
+void InitializeSensor(sensor_t *sensorCh)
+{
+    int index;
+    for(index = 0; index < SAMPLE_SIZE; index++)
+    {
+        sensorCh->sample[index] = 0; // Initialize sample array to 0
+    }
+    sensorCh->insert = 0; // Initialize insert index to 0
+    sensorCh->avgReady = FALSE; // Initialize average ready flag to FALSE
+    sensorCh->Llimit = 0; // Initialize lower limit to 0
+    sensorCh->Hlimit = 0; // Initialize upper limit to 0
+    sensorCh->average = 0; // Initialize average to 0
+
+} // eo InitializeSensor::
+
+/*>>> configSP1: ===========================================================
+Author:		Vraj Patel
+Date:	05/13/2025
+Modified:	None
+Desc:		This function will configure the serial port for 8-bit transmission
+            and asynchronous mode. It also sets the baud rate to 25.
+Input: 		None
+Returns:	None 
+ ============================================================================*/
+void configSP1()
+{
+	TXSTA1 = 0x26; // 8 bit transmission, Asynchronous mode
+	RCSTA1 = 0x80; // Serial Port enabled, 8 bit reception
+	BAUDCON1 = 0x40; 
+	SPBRGH1 = 0x00;
+	SPBRG1 = 0x19; // 25 Decimal
+}// eo configSP1::
+
 
 /*>>> SystemInitialization: ========================================
 Author:		Vraj Patel
@@ -171,10 +230,11 @@ Returns:	None.
  ============================================================================*/
 void SystemInitialization(void)
 {
-    oscConfig(); // Configure the oscillator
-    ioConfig(); // Configure I/O pins
-    ConfigADC(); // Configure ADC Conversion
-    configTMR0(PRESETCOUNT); // Configure Timer0
+    OSConfig(); // Configure oscillator
+    IOConfig(); // Configure I/O pins
+    ConfigADC(); // Configure ADC
+    configSP1(); // Configure Serial Port 1
+    configTMR0(PRESENTCOUNT); // Configure Timer0
 } // eo SystemInitialization::
 
 
@@ -184,5 +244,45 @@ void SystemInitialization(void)
  ============================================================================*/
 void main( void )
 {
+    SystemInitialization(); // Initialize system
+    int startup = 0;
+    for(startup = 0; startup < SENSORCOUNT; startup++)
+    {
+        InitializeSensor(&sensorCh[startup]); // Initialize each sensor
+    }
+    
+    while(1)
+    {
+        char sensorID = 0;
+
+        for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
+        {
+            sensorCh[sensorID].sample[sensorCh[sensorID].insert] = getADCSample(sensorID); // Get ADC sample
+            sensorCh[sensorID].insert++; // Increment insert index
+            if(sensorCh[sensorID].insert >= SAMPLE_SIZE)
+            {
+                sensorCh[sensorID].insert = 0; // Reset insert index if it exceeds sample size
+                sensorCh[sensorID].avgReady = TRUE; // Set average ready flag
+            }
+        }
+
+        if(sensorCh[0].avgReady && sensorCh[1].avgReady && sensorCh[2].avgReady)
+        {
+            for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
+            {
+                int index;
+                int sum = 0;
+                for(index = 0; index < SAMPLE_SIZE; index++)
+                {
+                    sum += sensorCh[sensorID].sample[index]; // Calculate sum of samples
+                }
+                sensorCh[sensorID].average = sum / SAMPLE_SIZE; // Calculate average
+                sensorCh[sensorID].avgReady = FALSE; // Reset average ready flag
+            }
+        }
+
+        printf("Sensor 0: %d, Sensor 1: %d, Sensor 2: %d\n", sensorCh[0].average, sensorCh[1].average, sensorCh[2].average); // Print average values
+    }
+
 	
 } // eo main::
