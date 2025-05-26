@@ -33,8 +33,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/vrajp/projects/my_project_2/ELNC_6006",
-      "program": "c:/Users/vrajp/projects/my_project_2/ELNC_6006/build/Debug/outDebug",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
@@ -44,6 +44,16 @@
           "ignoreFailures": true
         }
       ]
+<<<<<<< Updated upstream
+=======
+    },
+    {
+      "name": "Launch HTML in Browser",
+      "type": "pwa-msedge", // or "pwa-chrome"
+      "request": "launch",
+      "file": "${workspaceFolder}/index.html",
+      "webRoot": "${workspaceFolder}"
+>>>>>>> Stashed changes
     }
   ],
   "version": "2.0.0"

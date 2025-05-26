@@ -1,0 +1,16 @@
+h1{
+    color: #1e00ff;
+    background-color: #f0f0f0;
+    padding: 55px;
+    margin-left: 55px;
+    border: 2px solid black;
+}
+
+.highlight-text {
+    color: #ff0000;
+}
+
+.week2-input-group 
+{
+  padding-bottom: 15px;
+}

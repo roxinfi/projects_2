@@ -40,7 +40,9 @@
 #define SENSORCOUNT 3 // Number of sensors
 #define ON 0xFF
 #define OFF 0x00
-
+#define ONSEC 1 // 1 second
+#define HL 1023 // High limit
+#define LL 0 // Low limit
 
 
 // Global Variables  ==========================================================
@@ -55,8 +57,7 @@ typedef struct
     int average; // Average of samples
 } sensor_t;
 
-sensor_t sensorCh[SENSORCOUNT]; // Array of sensor structures
-sensor_t *sensorChPtr; // Pointer to sensor structure
+sensor_t sensors[SENSORCOUNT]; // Array of sensor structures
 
 // Functions  =================================================================
 
@@ -110,7 +111,7 @@ void ConfigIO(void)
 } // eo ConfigIO::
 
 /*>>> ConfigADC: ===========================================================
-Author:		vraj Patel
+Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
 Desc:		This functions configures the ADC module to 12TAD, right justified , Fosc/8
@@ -130,8 +131,8 @@ void ConfigADC(void)
 Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
-Desc:		This function will reset the Timer0 counter.
-Input: 		setcount, to set the count value for the timer.
+Desc:		This function will reset the Timer0 counter to pre-set count.
+Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
 void resetTMR0(int setcount)
@@ -146,14 +147,14 @@ void resetTMR0(int setcount)
 Author:		Vraj Patel
 Date:		01/12/2024
 Modified:	None
-Desc:		This function will configure the Timer0 for 1:8 prescaler and 16-bit mode.
-Input: 		setcount, to set the count value for the timer.
+Desc:		This function will configure the Timer0 for 1:4 prescaler and 16-bit mode.
+Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
 void configTMR0(int setcount)
 {
 	resetTMR0(setcount);
-	T0CON = 0x91;
+	T0CON = 0x93;
 } // eo configTMR0::
 
 
@@ -212,7 +213,7 @@ Returns:	None
 void configSP1()
 {
 	TXSTA1 = 0x26; // 8 bit transmission, Asynchronous mode
-	RCSTA1 = 0x80; // Serial Port enabled, 8 bit reception
+	RCSTA1 = 0x90; // Serial Port enabled, 8 bit reception
 	BAUDCON1 = 0x40; 
 	SPBRGH1 = 0x00;
 	SPBRG1 = 0x19; // 25 Decimal
@@ -224,14 +225,14 @@ Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
 Desc:		This function will be called in the main for intialization
-			of clock, I/Os, and ADC  configuration functions.
+			of clock, I/Os, and ADC  configuration, USART1, and Timer0.
 Input: 		None.
 Returns:	None.
  ============================================================================*/
 void SystemInitialization(void)
 {
     OSConfig(); // Configure oscillator
-    IOConfig(); // Configure I/O pins
+    ConfigIO(); // Configure I/O pins
     ConfigADC(); // Configure ADC
     configSP1(); // Configure Serial Port 1
     configTMR0(PRESENTCOUNT); // Configure Timer0
@@ -244,45 +245,53 @@ void SystemInitialization(void)
  ============================================================================*/
 void main( void )
 {
-    SystemInitialization(); // Initialize system
+	char second = 0;
+    char sensorindex = 0;
     int startup = 0;
     for(startup = 0; startup < SENSORCOUNT; startup++)
     {
-        InitializeSensor(&sensorCh[startup]); // Initialize each sensor
+        InitializeSensor(&sensors[startup]); // Initialize each sensor
     }
+	SystemInitialization(); // Initialize system
     
     while(1)
     {
-        char sensorID = 0;
-
-        for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
+        if(TMR0FLAG)
         {
-            sensorCh[sensorID].sample[sensorCh[sensorID].insert] = getADCSample(sensorID); // Get ADC sample
-            sensorCh[sensorID].insert++; // Increment insert index
-            if(sensorCh[sensorID].insert >= SAMPLE_SIZE)
+            resetTMR0(PRESENTCOUNT); // Reset Timer0
+            second++; // Increment second counter
+            if(second == ONSEC)
             {
-                sensorCh[sensorID].insert = 0; // Reset insert index if it exceeds sample size
-                sensorCh[sensorID].avgReady = TRUE; // Set average ready flag
-            }
-        }
-
-        if(sensorCh[0].avgReady && sensorCh[1].avgReady && sensorCh[2].avgReady)
-        {
-            for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
-            {
-                int index;
-                int sum = 0;
-                for(index = 0; index < SAMPLE_SIZE; index++)
+                second = 0; // Reset second counter
+                for(sensorindex = 0; sensorindex < SENSORCOUNT; sensorindex++)
                 {
-                    sum += sensorCh[sensorID].sample[index]; // Calculate sum of samples
+                    sensors[sensorindex].sample[sensors[sensorindex].insert] = getADCSample(sensorindex); // Get ADC sample
+                    sensors[sensorindex].insert++; // Increment insert index
+                    if(sensors[sensorindex].insert >= SAMPLE_SIZE)
+                    {
+                        sensors[sensorindex].insert = 0; // Reset insert index if it exceeds sample size
+                        sensors[sensorindex].avgReady = TRUE; // Set average ready flag
+                    }
+                    if(sensors[sensorindex].avgReady)
+                    {
+                        int index;
+                        long sum = 0;
+                        for(index = 0; index < SAMPLE_SIZE; index++)
+                        {
+                            sum += sensors[sensorindex].sample[index]; // Calculate sum of samples
+                        }
+                        sensors[sensorindex].average = sum / SAMPLE_SIZE; // Calculate average
+                        sensors[sensorindex].avgReady = FALSE; // Reset average ready flag
+                        
+					}
                 }
-                sensorCh[sensorID].average = sum / SAMPLE_SIZE; // Calculate average
-                sensorCh[sensorID].avgReady = FALSE; // Reset average ready flag
+                
             }
+			printf("\033[2J \033[H"); // Clear screen
+			printf("Sensor Syestem (437)\n\n\r");
+			printf("Sen0: %3d,\tSen1: %3d,\tSensor 2: %3d\n\r", sensors[0].average, sensors[1].average, sensors[2].average); // Print average values  
+            printf("HL: %3d,\tHL: %3d,\tHL: %3d\n\r", HL, HL, HL); // Print high limit values
+            printf("LL: %3d,\tLL: %3d,\tLL: %3d\n", LL, LL, LL); // Print low limit values
         }
-
-        printf("Sensor 0: %d, Sensor 1: %d, Sensor 2: %d\n", sensorCh[0].average, sensorCh[1].average, sensorCh[2].average); // Print average values
     }
-
-	
 } // eo main::
