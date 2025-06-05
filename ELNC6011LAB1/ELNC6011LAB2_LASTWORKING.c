@@ -48,13 +48,16 @@
 #define	INCREASE	0x70
 #define	DECREASE	0XB0
 #define PBSTATE (PORTA & PBMASK) // Push button state
-#define ADCRESOLUTION (5/1023) // ADC resolution
-#define TEMPB 0.5 // Temperature offset
-#define TEMPM 0.01 // Temperature multiplier
-#define HUMIDM 0.05 // Humidity multiplier
-#define CO2M  0.00035625 // CO2 multiplier
-#define DEBOUNCE_DELAY 10 // Delay for debouncing the push button
-#define ONSEC 1 // One second in Timer0 counts
+#define ADCRESOLUTION  (5.0f/1023.0f)   // ? now a true float (˜0.0048876)
+#define TEMPB           0.5f           // Temperature offset in volts
+#define TEMPM           0.01f          // Temperature multiplier (°C per volt)
+#define HUMIDM          0.05f          // Humidity multiplier (fraction per volt)
+#define CO2M            0.00035625f    // CO2 multiplier (volts per ppm)
+#define DEBOUNCE_DELAY  10             // milliseconds of debounce
+#define ONSEC           1              // “1 second” worth of Timer0 overflows
+#define DEGREE 	248 // Character for degree symbol
+#define PATTERNCOUNT 4 // Number of patterns for stepper motor
+
 
 
 // Global Variables  ==========================================================
@@ -81,7 +84,7 @@ typedef struct
 typedef struct
 {
     int channelselect; // Channel selection for the sensor
-    char mode; // Mode of the sensor (e.g., analog, digital)
+    char mode; // Mode of the sensor (High/Low limit)
     int pbstate; // Push button state
     int laststate; // Last state of the push button
 }pbs_t;
@@ -93,7 +96,7 @@ stepper_t vent;
 // craete an object of the push button sensor type above, named "pbs"
 pbs_t pbs;
 
-char stpmotorarr[4] = {0x01, 0x02, 0x04, 0x08}; // Array for stepper motor states
+char stpmotorarr[PATTERNCOUNT] = {0x01, 0x02, 0x04, 0x08}; // Array for stepper motor states
 
 sensor_t sensorCh[SENSORCOUNT]; // Array of sensor structures
 sensor_t *sensorChPtr; // Pointer to sensor structure
@@ -216,6 +219,30 @@ int getADCSample(char adcChnl)
 	return ADRES;
 } // eo getADCSample::
 
+/*>>> InitializeSensor: ========================================
+Author:		Vraj Patel
+Date:		05/13/2025
+Modified:	None
+Desc:		This function will calculate the average of the samples taken from the sensor.
+Input: 		sensorCh_t *sensorCh, pointer to the sensor channel structure.
+Returns:	int, the average of the samples.
+ ============================================================================*/
+void InitializeSensor(sensor_t *sensorCh)
+{
+    int index;
+    for(index = 0; index < SAMPLE_SIZE; index++)
+    {
+        sensorCh->sample[index] = 0; // Initialize sample array to 0
+    }
+    sensorCh->insert = 0; // Initialize insert index to 0
+    sensorCh->avgReady = FALSE; // Initialize average ready flag to FALSE
+    sensorCh->Llimit = 0; // Initialize lower limit to 0
+    sensorCh->Hlimit = 0; // Initialize upper limit to 0
+    sensorCh->average = 0; // Initialize average to 0
+
+} // eo InitializeSensor::
+
+
 
 /*>>> IntializeStepper: ========================================
 Author:		Vraj Patel
@@ -284,7 +311,7 @@ void ChangeChannel(void)
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
-Desc:		This function will increase the high or low limit of the selected sensor channel.
+Desc:		This function will increase the high or low limit of the selected sensor channel on the push button state of INCREASE.
 Input: 		None
 Returns:	None
  ============================================================================*/
@@ -306,7 +333,7 @@ void IncreaseLimit(void)
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
-Desc:		This function will decrease the high or low limit of the selected sensor channel.
+Desc:		This function will decrease the high or low limit of the selected sensor channel on the push button state of DECREASE.
 Input: 		None
 Returns:	None
  ============================================================================*/
@@ -346,9 +373,10 @@ void DisplayData(void)
     {
         printf("\tMode: High Limit\n\r");
     }
-    printf("Sen0: %3d,\tSen1: %3d,\tSensor 2: %3d\n\r", sensorCh[0].average, sensorCh[1].average, sensorCh[2].average); // Print sensor averages
-    printf("HL: %3d,\tHL: %3d,\tHL: %3d\n\r", sensorCh[0].Hlimit, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
-    printf("LL: %3d,\tLL: %3d,\tLL: %3d\n", sensorCh[0].Llimit, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
+    printf("\n\r");
+    printf("Sen0: %3d%cC,\tSen1: %3d%%,\tSensor 2: %3dppm\n\r", sensorCh[0].average, DEGREE, sensorCh[1].average, sensorCh[2].average); // Print sensor averages
+    printf("HL: %3d%cC,\tHL: %3d%%,\tHL: %3dppm\n\r", sensorCh[0].Hlimit, DEGREE, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
+    printf("LL: %3d%cC,\tLL: %3d%%,\tLL: %3dppm\n", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
 
 }// eo DisplayData::
 
@@ -398,10 +426,12 @@ void main( void )
 {
 	char second = 0;
     char sensorindex = 0;
-    int startup = 0;
-    int temperature = 0; // Variable to hold temperature value
-    int humidity = 0; // Variable to hold humidity value
-    int CO2ppm = 0; // Variable to hold CO2 ppm value
+    char startup = 0;
+    float rawADC = 0;
+    float volts = 0;
+    float tempC = 0;
+    float rh = 0;
+    float ppm = 0;
 
     IntializePBS(&pbs); // Initialize push button sensor
     IntializeStepper(&vent); // Initialize stepper motor
@@ -462,29 +492,30 @@ void main( void )
                         {
                             sum += sensorCh[sensorindex].sample[index]; // Calculate sum of samples
                         }
-                        sensorCh[sensorindex].average = sum / SAMPLE_SIZE; // Calculate average
+                        rawADC = (float)sum / SAMPLE_SIZE;
+                        volts  = rawADC * ADCRESOLUTION;
                         if(sensorindex == 0) // If it's the first sensor // Tempearture Sensor !!
                         {
-                            temperature = sensorCh[sensorindex].average * ADCRESOLUTION;
-                            temperature = temperature - TEMPB; 
-                            temperature = temperature / TEMPM; 
+                           	tempC = (volts - TEMPB) / TEMPM;
+                            sensorCh[sensorindex].average = (int) tempC;     
                         }
                         if(sensorindex == 1) // If it's the second sensor !! Humidity Sensor !!
                         {
-                            humidity = sensorCh[sensorindex].average * ADCRESOLUTION;
-                            humidity = humidity / HUMIDM; // Convert ADC value to humidity 
+                            rh = volts / HUMIDM;
+                            sensorCh[sensorindex].average = (int) rh;
                         }
                         if(sensorindex == 2) // If it's the third sensor !! CO2 Sensor !!
                         {
-                            CO2ppm = sensorCh[sensorindex].average * ADCRESOLUTION;
-                            CO2ppm = CO2ppm / CO2M; // Convert ADC value to CO2 ppm
+                            ppm = volts / CO2M;
+                            sensorCh[sensorindex].average = (int) ppm;
                         }
                         sensorCh[sensorindex].avgReady = FALSE; // Reset average ready flag
 					}
                 }
-                DisplayData(); // Display sensor data                
             }
 
+        DisplayData(); // Display sensor data
+        }
         pbs.pbstate = PBSTATE; // Update push button state
 
         if(pbs.pbstate != pbs.laststate) // If push button state has changed
@@ -517,7 +548,5 @@ void main( void )
             pbs.laststate = NOPRESS; // Update last state
         }
 
-			
-        }
     }
 } // eo main::

@@ -2,7 +2,7 @@
 /*=============================================================================
 	File Name:	ELNC6011LAB1.c  
 	Author:		Vraj Patel
-	Date:		05/13/2025
+	Date:		05/27/2025
 	Modified:	None
 	© Fanshawe College, 2025
 
@@ -30,6 +30,7 @@
 #include <p18f45k22.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <delays.h>
 
 // Constants  =================================================================
 #define TRUE	1	
@@ -41,7 +42,22 @@
 #define ON 0xFF
 #define OFF 0x00
 #define PBMASK 0xF0 // Mask for push button state
-#define PBSTATE PORTA & PBMASK // Push button state
+#define NOPRESS    0xF0 // No press state for push button
+#define MODEPRESS	0xE0
+#define	CHANNELPRESS	0xD0
+#define	INCREASE	0x70
+#define	DECREASE	0XB0
+#define PBSTATE (PORTA & PBMASK) // Push button state
+#define ADCRESOLUTION  (5.0f/1023.0f)   // ? now a true float (˜0.0048876)
+#define TEMPB           0.5f           // Temperature offset in volts
+#define TEMPM           0.01f          // Temperature multiplier (°C per volt)
+#define HUMIDM          0.05f          // Humidity multiplier (fraction per volt)
+#define CO2M            0.00035625f    // CO2 multiplier (volts per ppm)
+#define DEBOUNCE_DELAY  10             // milliseconds of debounce
+#define ONSEC           1              // “1 second” worth of Timer0 overflows
+#define DEGREE 	248 // Character for degree symbol
+#define PATTERNCOUNT 4 // Number of patterns for stepper motor
+
 
 
 // Global Variables  ==========================================================
@@ -68,7 +84,7 @@ typedef struct
 typedef struct
 {
     int channelselect; // Channel selection for the sensor
-    char mode; // Mode of the sensor (e.g., analog, digital)
+    char mode; // Mode of the sensor (High/Low limit)
     int pbstate; // Push button state
     int laststate; // Last state of the push button
 }pbs_t;
@@ -80,7 +96,7 @@ stepper_t vent;
 // craete an object of the push button sensor type above, named "pbs"
 pbs_t pbs;
 
-stpmotorarr[4] = {0x01, 0x02, 0x04, 0x08}; // Array for stepper motor states
+char stpmotorarr[PATTERNCOUNT] = {0x01, 0x02, 0x04, 0x08}; // Array for stepper motor states
 
 sensor_t sensorCh[SENSORCOUNT]; // Array of sensor structures
 sensor_t *sensorChPtr; // Pointer to sensor structure
@@ -137,7 +153,7 @@ void ConfigIO(void)
 } // eo ConfigIO::
 
 /*>>> ConfigADC: ===========================================================
-Author:		vraj Patel
+Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
 Desc:		This functions configures the ADC module to 12TAD, right justified , Fosc/8
@@ -157,8 +173,8 @@ void ConfigADC(void)
 Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
-Desc:		This function will reset the Timer0 counter.
-Input: 		setcount, to set the count value for the timer.
+Desc:		This function will reset the Timer0 counter to pre-set count.
+Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
 void resetTMR0(int setcount)
@@ -171,16 +187,16 @@ void resetTMR0(int setcount)
 
 /*>>> configTMR0: ===========================================================
 Author:		Vraj Patel
-Date:		01/12/2024
+Date:		05/13/2025
 Modified:	None
-Desc:		This function will configure the Timer0 for 1:8 prescaler and 16-bit mode.
-Input: 		setcount, to set the count value for the timer.
+Desc:		This function will configure the Timer0 for 1:4 prescaler and 16-bit mode.
+Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
 void configTMR0(int setcount)
 {
 	resetTMR0(setcount);
-	T0CON = 0x91;
+	T0CON = 0x93;
 } // eo configTMR0::
 
 
@@ -198,11 +214,9 @@ int getADCSample(char adcChnl)
 {
 	ADCON0bits.CHS = adcChnl;
 	ADCON0bits.GO  = TRUE;
-	
 	while(ADCON0bits.GO);
 	return ADRES;
 } // eo getADCSample::
-
 
 /*>>> InitializeSensor: ========================================
 Author:		Vraj Patel
@@ -226,6 +240,7 @@ void InitializeSensor(sensor_t *sensorCh)
     sensorCh->average = 0; // Initialize average to 0
 
 } // eo InitializeSensor::
+
 
 
 /*>>> IntializeStepper: ========================================
@@ -261,6 +276,81 @@ void IntializePBS(pbs_t *pbs)
     pbs->laststate = PBMASK; // Last state of the push button is masked
 }// eo IntializePBS::
 
+/*>>> ChangeMode: ===========================================================
+Author:		Vraj Patel
+Date:		05/27/2025
+Modified:	None
+Desc:		a variable that will be TRUE or FALSE, indicating that the High or Low limit of the selected channel.
+Input: 		None
+Returns:	None
+ ============================================================================*/
+void ChangeMode(void)
+{
+    pbs.mode = !pbs.mode; // Toggle mode between high and low limit
+}// eo ChangeMode::
+
+/*>>> ChangeChannel: ===========================================================
+Author:		Vraj Patel
+Date:		05/27/2025
+Modified:	None
+Desc:		This function will change the senesor channel based on the push button state of MODEPRESS.
+Input: 		None
+Returns:	None
+ ============================================================================*/
+void ChangeChannel(void)
+{
+    pbs.channelselect++; // Increment channel selection
+    if(pbs.channelselect >= SENSORCOUNT) // If it exceeds the number of sensors
+    {
+        pbs.channelselect = 0; // Reset to first sensor
+    }
+}// eo ChangeChannel::
+
+/*>>> IncreaseLimit: ===========================================================
+Author:		Vraj Patel
+Date:		05/27/2025
+Modified:	None
+Desc:		This function will increase the high or low limit of the selected sensor channel on the push button state of INCREASE.
+Input: 		None
+Returns:	None
+ ============================================================================*/
+void IncreaseLimit(void)
+{
+    char ch = pbs.channelselect; // Get the selected channel
+    
+    if (pbs.mode == 0) 
+    {
+        sensorCh[ch].Llimit++;
+    }
+    else 
+    {
+        sensorCh[ch].Hlimit++;
+    }
+}// eo IncreaseLimit::
+
+/*>>> DecreaseLimit: ===========================================================
+Author:		Vraj Patel
+Date:		05/27/2025
+Modified:	None
+Desc:		This function will decrease the high or low limit of the selected sensor channel on the push button state of DECREASE.
+Input: 		None
+Returns:	None
+ ============================================================================*/
+void DecreaseLimit(void)
+{
+    int ch = pbs.channelselect;
+
+    if (pbs.mode == 0) 
+    {
+        sensorCh[ch].Llimit--;
+    } 
+    
+    else 
+    {
+        sensorCh[ch].Hlimit--;
+    }
+}// eo DecreaseLimit::
+
 /* >>>DisplayData: ===========================================================
 Author:		Vraj Patel
 Date:		05/27/2025
@@ -271,14 +361,23 @@ Returns:	None
     ============================================================================*/
 void DisplayData(void)
 {
-            printf("\033[2J \033[H"); // Clear screen
-			printf("Sensor Syestem (437)\n\n\r");
-			printf("channel: %d")
-            printf("Sen0: %3d,\tSen1: %3d,\tSensor 2: %3d\n\r", sensors[0].average, sensors[1].average, sensors[2].average); // Print average values  
-            printf("HL: %3d,\tHL: %3d,\tHL: %3d\n\r", HL, HL, HL); // Print high limit values
-            printf("LL: %3d,\tLL: %3d,\tLL: %3d\n", LL, LL, LL); // Print low limit values
+	printf("\033[2J \033[H"); // Clear screen
+	printf("Sensor System (437)\n\n\r");
+    printf("Channel: %d", pbs.channelselect); // Print selected channel
+    if(pbs.mode == 0) // If mode is low limit
+    {
+        printf("\tMode: Low Limit\n\r");
+    }
+    else // If mode is high limit
+    {
+        printf("\tMode: High Limit\n\r");
+    }
+    printf("\n\r");
+    printf("Sen0: %3d%cC,\tSen1: %3d%%,\tSensor 2: %3dppm\n\r", sensorCh[0].average, DEGREE, sensorCh[1].average, sensorCh[2].average); // Print sensor averages
+    printf("HL: %3d%cC,\tHL: %3d%%,\tHL: %3dppm\n\r", sensorCh[0].Hlimit, DEGREE, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
+    printf("LL: %3d%cC,\tLL: %3d%%,\tLL: %3dppm\n", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
 
-}
+}// eo DisplayData::
 
 /*>>> configSP1: ===========================================================
 Author:		Vraj Patel
@@ -292,7 +391,7 @@ Returns:	None
 void configSP1()
 {
 	TXSTA1 = 0x26; // 8 bit transmission, Asynchronous mode
-	RCSTA1 = 0x80; // Serial Port enabled, 8 bit reception
+	RCSTA1 = 0x90; // Serial Port enabled, 8 bit reception
 	BAUDCON1 = 0x40; 
 	SPBRGH1 = 0x00;
 	SPBRG1 = 0x19; // 25 Decimal
@@ -304,14 +403,14 @@ Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
 Desc:		This function will be called in the main for intialization
-			of clock, I/Os, and ADC  configuration functions.
+			of clock, I/Os, and ADC  configuration, USART1, and Timer0.
 Input: 		None.
 Returns:	None.
  ============================================================================*/
 void SystemInitialization(void)
 {
     OSConfig(); // Configure oscillator
-    IOConfig(); // Configure I/O pins
+    ConfigIO(); // Configure I/O pins
     ConfigADC(); // Configure ADC
     configSP1(); // Configure Serial Port 1
     configTMR0(PRESENTCOUNT); // Configure Timer0
@@ -324,48 +423,129 @@ void SystemInitialization(void)
  ============================================================================*/
 void main( void )
 {
+	char second = 0;
+    char sensorindex = 0;
+    char startup = 0;
+    float rawADC = 0;
+    float volts = 0;
+    float tempC = 0;
+    float rh = 0;
+    float ppm = 0;
+
+    IntializePBS(&pbs); // Initialize push button sensor
+    IntializeStepper(&vent); // Initialize stepper motor
     pbs.pbstate = PBSTATE; // Initialize push button state
-    SystemInitialization(); // Initialize system
-    int startup = 0;
     for(startup = 0; startup < SENSORCOUNT; startup++)
     {
         InitializeSensor(&sensorCh[startup]); // Initialize each sensor
+        switch (startup)
+        {
+            case 0: // Temperature Sensor
+                sensorCh[startup].Llimit = -40; // Set lower limit for temperature
+                sensorCh[startup].Hlimit = 125; // Set upper limit for temperature
+                break;
+
+            case 1: // Humidity Sensor
+                sensorCh[startup].Llimit = 0; // Set lower limit for humidity
+                sensorCh[startup].Hlimit = 100; // Set upper limit for humidity
+                break;
+            
+            case 2: // CO2 Sensor
+                sensorCh[startup].Llimit = 400; // Set lower limit for CO2 ppm
+                sensorCh[startup].Hlimit = 5200; // Set upper limit for CO2 ppm
+                break;
+            
+            default:
+                break;
+        }
     }
+
+    IntializeStepper(&vent); // Initialize stepper motor
+    IntializePBS(&pbs); // Initialize push button sensor
+
+	SystemInitialization(); // Initialize system
     
     while(1)
     {
-        char sensorID = 0;
-        pbs.pbstate = 
-
-        for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
+        if(TMR0FLAG)
         {
-            sensorCh[sensorID].sample[sensorCh[sensorID].insert] = getADCSample(sensorID); // Get ADC sample
-            sensorCh[sensorID].insert++; // Increment insert index
-            if(sensorCh[sensorID].insert >= SAMPLE_SIZE)
+            resetTMR0(PRESENTCOUNT); // Reset Timer0
+            second++; // Increment second counter
+            if(second == ONSEC)
             {
-                sensorCh[sensorID].insert = 0; // Reset insert index if it exceeds sample size
-                sensorCh[sensorID].avgReady = TRUE; // Set average ready flag
-            }
-        }
-
-        if(sensorCh[0].avgReady && sensorCh[1].avgReady && sensorCh[2].avgReady)
-        {
-            for(sensorID = 0; sensorID < SENSORCOUNT; sensorID++)
-            {
-                int index;
-                int sum = 0;
-                for(index = 0; index < SAMPLE_SIZE; index++)
+                second = 0; // Reset second counter
+                for(sensorindex = 0; sensorindex < SENSORCOUNT; sensorindex++)
                 {
-                    sum += sensorCh[sensorID].sample[index]; // Calculate sum of samples
+                    sensorCh[sensorindex].sample[sensorCh[sensorindex].insert] = getADCSample(sensorindex); // Get ADC sample
+                    sensorCh[sensorindex].insert++; // Increment insert index
+                    if(sensorCh[sensorindex].insert >= SAMPLE_SIZE)
+                    {
+                        sensorCh[sensorindex].insert = 0; // Reset insert index if it exceeds sample size
+                        sensorCh[sensorindex].avgReady = TRUE; // Set average ready flag
+                    }
+                    if(sensorCh[sensorindex].avgReady)
+                    {
+                        char index;
+                        long sum = 0;
+                        for(index = 0; index < SAMPLE_SIZE; index++)
+                        {
+                            sum += sensorCh[sensorindex].sample[index]; // Calculate sum of samples
+                        }
+                        rawADC = (float)sum / SAMPLE_SIZE; // Calculate raw ADC value 
+                        volts  = rawADC * ADCRESOLUTION; // Convert raw ADC value to volts
+                        if(sensorindex == 0) // If it's the first sensor // Tempearture Sensor !!
+                        {
+                           	tempC = (volts - TEMPB) / TEMPM; // Calculate temperature in Celsius
+                            sensorCh[sensorindex].average = (int) tempC;     // Store average temperature
+                        }
+                        if(sensorindex == 1) // If it's the second sensor !! Humidity Sensor !!
+                        {
+                            rh = volts / HUMIDM; // Calculate relative humidity
+                            sensorCh[sensorindex].average = (int) rh; // Store average humidity
+                        }
+                        if(sensorindex == 2) // If it's the third sensor !! CO2 Sensor !!
+                        {
+                            ppm = volts / CO2M; // Calculate CO2 ppm
+                            sensorCh[sensorindex].average = (int) ppm; // Store average CO2 ppm
+                        }
+                        sensorCh[sensorindex].avgReady = FALSE; // Reset average ready flag
+					}
                 }
-                sensorCh[sensorID].average = sum / SAMPLE_SIZE; // Calculate average
-                sensorCh[sensorID].avgReady = FALSE; // Reset average ready flag
+            }
+
+        DisplayData(); // Display sensor data
+    } // End of Timer0 interrupt handling
+    pbs.pbstate = PBSTATE; // Update push button state
+
+    if(pbs.pbstate != pbs.laststate) // If push button state has changed
+    {
+        Delay10TCYx(DEBOUNCE_DELAY); // Debounce delay
+        if(pbs.pbstate != PBSTATE) // Check if state is still changed
+        {
+            pbs.laststate = pbs.pbstate; // Update last state
+            switch (pbs.pbstate)
+            {
+                case MODEPRESS: // If MODE button is pressed
+                    ChangeMode(); // Change mode
+                    break;
+                case CHANNELPRESS: // If CHANNEL button is pressed
+                    ChangeChannel(); // Change channel
+                    break;
+                case INCREASE: // If INCREASE button is pressed
+                    IncreaseLimit(); // Increase limit
+                    break;
+                case DECREASE: // If DECREASE button is pressed
+                    DecreaseLimit(); // Decrease limit
+                    break;
+                default:
+                    break; // Do nothing for other states
             }
         }
-
-        if()
-
+    }
+    if(pbs.pbstate == NOPRESS) // If no button is pressed
+    {
+        pbs.laststate = NOPRESS; // Update last state
     }
 
-	
+    }// End of while(1) loop
 } // eo main::

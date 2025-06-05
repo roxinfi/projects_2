@@ -155,7 +155,7 @@ void systemInitialization (void)
 
 void main(void)
 {
-char count=0; // Initialize a counter
+	char count=0; // Initialize a counter
 	char chID=0;
 	systemInitialization();
 	for(chID=0; chID<SENSORCOUNT; chID++)  // Initialize each sensor channel by resetting its data
