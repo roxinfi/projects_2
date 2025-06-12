@@ -1,0 +1,23 @@
+// Elnc 6012 Design Report preparation
+1). Introduction (2 slides) [Mihir Jariwala]
+    -> Project Introduction(Despite the project, why it is important, etc..)
+    -> Dashboard Introduction (project stastus, etc..) 
+2). Discovery & Challenges (3 slides) [Vraj Patel]
+    -> Market Analysis (Market size, competitors, present products, etc..)
+    -> Available Solutions (What is available in the market, what are the limitations, etc..)
+    -> Overview of the project (What we are doing, how we are doing it, what is the prodcut goal, etc..)
+3). Project Status (1 slide) [Mihir Jariwala]
+    -> Project Status (What is the current status of the project, what has been done, what is pending, etc..)
+4). Details of the project (1 slide) [Vamsi Reddy]
+    -> Project Details (What is the project, what are the features, what is the architecture, block diagram, etc..)
+      -> Flow chart (How the project works, what are the steps, etc..)
+         -> 2 Slides for Primary Contoller
+         -> 2 Slides for Secondary Controller
+5). Testing & Development (1 slide) [Samip Patel]
+    -> Testing & Development (What has been tested, what is pending, what are the challenges, what is the checklist to meet, etc..)
+6). Team Responsibilities (2 Slides) [All]
+    -> Team Responsibilities (Who is doing what, what are the roles, etc..)
+    -> Team Members (Who are the team members, what are their roles, etc..)
+    -> 2 member per slide
+7). Next step & tasks (1 slide) [Samip Patel]
+    -> Next step & tasks (What are the next steps, what are the tasks, what is the timeline, etc..) 
