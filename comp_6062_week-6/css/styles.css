@@ -1,0 +1,11 @@
+.padding10{
+    padding: 30px;
+}
+
+.makeBold
+{
+    font-weight: bold;
+} 
+.makeItalic{
+    font-style: italic;
+}

@@ -63,6 +63,9 @@
 #define FAN LATCbits.LATC3 // Fan control pin
 #define SPKLR LATCbits.LATC4 // Speaker control pin
 #define STEP 3 // Stepper motor step count
+#define STEPS 3 // Number of steps for stepper motor
+#define STEPPERPORT LATB // Port for stepper motor control
+#define STEPPERMASK 0x0F // Mask for stepper motor control pins
 
 
 // Global Variables  ==========================================================
@@ -517,10 +520,50 @@ void main( void )
 					}
                 }
             }
-            if(vent.currentposition < vent.setposition)
+
+            if(sensorCh[0].average < sensorCh[pbs.channelselect].Llimit) // If temperature is below lower limit
             {
-                //increment pattern counter
-                
+                LIGHTING = ON; // Turn on lighting
+                COOLER = OFF; // Turn off cooler
+                HEATER = OFF; // Turn off heater
+                FAN = ON; // Turn on fan
+            }
+            else if(sensorCh[0].average > sensorCh[pbs.channelselect].Hlimit) // If temperature is above upper limit
+            {
+                LIGHTING = OFF; // Turn off lighting
+                COOLER = ON; // Turn on cooler
+                HEATER = OFF; // Turn off heater
+                FAN = ON; // Turn on fan
+            }
+            else // If temperature is within limits
+            {
+                LIGHTING = OFF; // Turn off lighting
+                COOLER = OFF; // Turn off cooler
+                HEATER = ON; // Turn on heater
+                FAN = OFF; // Turn off fan
+            }
+
+            if(vent.setposition > vent.currentposition)
+            {
+                vent.patterncount++; // Increment pattern count
+                if(vent.patterncount >= PATTERNCOUNT) // If pattern count exceeds number of patterns
+                {
+                    vent.patterncount = 0; // Reset pattern count
+                }
+                vent.currentpattern = stpmotorarr[vent.patterncount]; // Get next pattern
+                vent.currentposition = vent.currentposition + STEP; // Move stepper motor forward
+                STEPPERPORT = vent.currentpattern & STEPPERMASK; // Set stepper motor port
+            }
+            else if(vent.setposition < vent.currentposition)
+            {
+                vent.patterncount--; // Decrement pattern count
+                if(vent.patterncount < 0) // If pattern count is less than 0
+                {
+                    vent.patterncount = PATTERNCOUNT - 1; // Reset to last pattern
+                }
+                vent.currentpattern = stpmotorarr[vent.patterncount]; // Get previous pattern
+                vent.currentposition = vent.currentposition - STEP; // Move stepper motor backward
+                STEPPERPORT = vent.currentpattern & STEPPERMASK; // Set stepper motor port
             }
 
         DisplayData(); // Display sensor data
