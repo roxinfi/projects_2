@@ -1,14 +1,14 @@
 /*Use of AI / Cognitive Assistance Software is not allowed in any evaluation, assessment or exercise.*/
 /*=============================================================================
-	File Name:	ELNC6011LAB1.c  
+	File Name:	ELNC6011PROXIMITY.c
 	Author:		Vraj Patel
-	Date:		05/27/2025
+	Date:		07/05/2025
 	Modified:	None
 	© Fanshawe College, 2025
 
-	Description: Purppose of the code is it will allow the operator to collect samplaing from multiple sensors on
-				on a timed interval. Furthermore, the code will also collect and filter and average the collected data 
-				for appropriate system action. 
+	Description: This file contains the implementation of the ELNC6011 Proximity Sensor System.
+                 It includes functions for system initialization, sensor data acquisition,
+                 and checking object proximity using proximity sensors.
 =============================================================================*/
 
 /* Preprocessor ===============================================================
@@ -33,28 +33,28 @@
 #include <delays.h>
 
 // Constants  =================================================================
-#define TRUE	1	// True value for boolean
-#define FALSE	0 // False value for boolean
+#define TRUE	1	
+#define FALSE	0
 #define TMR0FLAG    INTCONbits.TMR0IF // Timer 0 flag
-#define PRESENTCOUNT 15536 // Preset count for Timer 0
+#define PRESENTCOUNT 3036 // Preset count for Timer 0
 #define SAMPLE_SIZE 10 // Number of samples to be taken
 #define SENSORCOUNT 3 // Number of sensors
-#define ON 0xFF // ON state for devices
-#define OFF 0x00 // OFF state for devices
+#define ON 0xFF
+#define OFF 0x00
 #define PBMASK 0xF0 // Mask for push button state
 #define NOPRESS    0xF0 // No press state for push button
-#define MODEPRESS	0xE0 // Mode button press state
-#define	CHANNELPRESS	0xD0 // Channel button press state
-#define	INCREASE	0x70 // Increase button press state
-#define	DECREASE	0XB0 // Decrease button press state
+#define MODEPRESS	0xE0
+#define	CHANNELPRESS	0xD0
+#define	INCREASE	0x70
+#define	DECREASE	0XB0
 #define PBSTATE (PORTA & PBMASK) // Push button state
-#define ADCRESOLUTION  (5.0f/1023.0f)   //  a true float value of (0.0048876)
+#define ADCRESOLUTION  (5.0f/1023.0f)   // ? now a true float (˜0.0048876)
 #define TEMPB           0.5f           // Temperature offset in volts
 #define TEMPM           0.01f          // Temperature multiplier (°C per volt)
 #define HUMIDM          0.05f          // Humidity multiplier (fraction per volt)
-#define CO2M            0.000345833f    // CO2 multiplier (volts per ppm)
+#define CO2M            0.00035625f    // CO2 multiplier (volts per ppm)
 #define DEBOUNCE_DELAY  10             // milliseconds of debounce
-#define ONSEC           10              // “1 second” worth of Timer0 overflows
+#define ONSEC           1              // “1 second” worth of Timer0 overflows
 #define DEGREE 	248 // Character for degree symbol
 #define PATTERNCOUNT 4 // Number of patterns for stepper motor
 #define LIGHTING LATCbits.LATC0 // Fan control pin
@@ -62,9 +62,8 @@
 #define HEATER LATCbits.LATC2 // Heater control pin
 #define FAN LATCbits.LATC3 // Fan control pin
 #define SPKLR LATCbits.LATC4 // Speaker control pin
-#define STEP 3 // Stepper motor step count
-#define STEPPERPORT LATB // Port for stepper motor control
-#define STEPPERMASK 0x0F // Mask for stepper motor control pins
+#define OBJECTDETECTED PORTDbits.RD0 // Object detected pin
+
 
 
 // Global Variables  ==========================================================
@@ -106,15 +105,15 @@ pbs_t pbs;
 char stpmotorarr[PATTERNCOUNT] = {0x01, 0x02, 0x04, 0x08}; // Array for stepper motor states
 
 sensor_t sensorCh[SENSORCOUNT]; // Array of sensor structures
-char state[2][4] = {"ON ", "OFF"}; // State of the devices (ON/OFF)
+sensor_t *sensorChPtr; // Pointer to sensor structure
 
 // Functions  =================================================================
 
 
 /*>>> OSConfig: ===========================================================
 Author:		Patel Vraj
-Date:		05/11/2024
-Modified:	13/05/2025
+Date:		13/05/2025
+Modified:	None
 Desc:		This function will configure internal oscillator of PIC18F45K22 to
 			4MHz and waits for it to be stablized
 Input: 		None.
@@ -129,8 +128,8 @@ void OSConfig(void)
 
 /*>>> ConfigIO: ===========================================================
 Author:		Patel Vraj
-Date:		05/11/2024
-Modified:	13/05/2025
+Date:		05/13/2025
+Modified:	None
 Desc:		This function will configure the I/O pins as input and output state according to conditions.
 			it also sets un-used pins in safe configuration
 Input: 		None.
@@ -144,7 +143,7 @@ void ConfigIO(void)
 
 	ANSELB = 0x00;
 	LATB   = 0x00;
-	TRISB  = 0xF0;
+	TRISB  = 0xFF;
 
 	ANSELC = 0x00;
 	LATC   = 0x00;
@@ -161,8 +160,8 @@ void ConfigIO(void)
 
 /*>>> ConfigADC: ===========================================================
 Author:		Vraj Patel
-Date:		05/11/2024
-Modified:	13/05/2025
+Date:		05/13/2025
+Modified:	None
 Desc:		This functions configures the ADC module to 12TAD, right justified , Fosc/8
 			and standard voltage references.
 Input: 		None.
@@ -180,8 +179,7 @@ void ConfigADC(void)
 Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
-Desc:		This function will reset the Timer0 counter to pre-set count, and clear the Timer0 flag.
-            This function is used to reset the Timer0 for the next cycle.
+Desc:		This function will reset the Timer0 counter to pre-set count.
 Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
@@ -195,17 +193,16 @@ void resetTMR0(int setcount)
 
 /*>>> configTMR0: ===========================================================
 Author:		Vraj Patel
-Date:		05/13/2025
+Date:		01/12/2024
 Modified:	None
-Desc:		This function will configure the Timer0 for 1:2 prescaler and 16-bit mode, 
-            and set the Timer0 to pre-set count. This function is used to configure the Timer0 for the next cycle.
+Desc:		This function will configure the Timer0 for 1:4 prescaler and 16-bit mode.
 Input: 		int setcount, to set the count value for the timer.
 Returns:	None.
  ============================================================================*/
 void configTMR0(int setcount)
 {
 	resetTMR0(setcount);
-	T0CON = 0x90;
+	T0CON = 0x93;
 } // eo configTMR0::
 
 
@@ -223,6 +220,7 @@ int getADCSample(char adcChnl)
 {
 	ADCON0bits.CHS = adcChnl;
 	ADCON0bits.GO  = TRUE;
+	
 	while(ADCON0bits.GO);
 	return ADRES;
 } // eo getADCSample::
@@ -233,7 +231,7 @@ Date:		05/13/2025
 Modified:	None
 Desc:		This function will calculate the average of the samples taken from the sensor.
 Input: 		sensorCh_t *sensorCh, pointer to the sensor channel structure.
-Returns:	None
+Returns:	int, the average of the samples.
  ============================================================================*/
 void InitializeSensor(sensor_t *sensorCh)
 {
@@ -364,9 +362,7 @@ void DecreaseLimit(void)
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
-Desc:		This function will display the data from the sensors on the serial port via USART1.
-            It will print the selected channel, mode, sensor averages, high and low limits,
-            and the state of the heater, cooler, fan, and speaker.
+Desc:		This function will display the data from the sensors on the serial port.
 Input: 		None
 Returns:	None
     ============================================================================*/
@@ -383,50 +379,10 @@ void DisplayData(void)
     {
         printf("\tMode: High Limit\n\r");
     }
-        printf("\n\r");
-    printf("Temperature: %3d%cC,\tHumidity: %3d%%,\tCO2: %3dppm\n\r", sensorCh[0].average, DEGREE, sensorCh[1].average, sensorCh[2].average); // Print sensor averages           
+    printf("\n\r");
+    printf("Sen0: %3d%cC,\tSen1: %3d%%,\tSensor 2: %3dppm\n\r", sensorCh[0].average, DEGREE, sensorCh[1].average, sensorCh[2].average); // Print sensor averages
     printf("HL: %3d%cC,\tHL: %3d%%,\tHL: %3dppm\n\r", sensorCh[0].Hlimit, DEGREE, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
-    printf("LL: %3d%cC,\tLL: %3d%%,\tLL: %3dppm\n\r", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
-    printf("\n\r");
-
-    if(HEATER) // If heater is ON
-    {
-        printf("Heater: %s\t", state[0]); // Print heater state
-    }
-    else // If heater is OFF
-    {
-        printf("Heater: %s\t", state[1]); // Print heater state
-    }
-    if(COOLER) // If cooler is ON
-    {
-        printf("Cooler: %s\t", state[0]); // Print cooler state
-    }
-    else // If cooler is OFF
-    {
-        printf("Cooler: %s\t", state[1]); // Print cooler state
-    }
-    if(FAN) // If fan is ON
-    {
-        printf("Fan: %s\t", state[0]); // Print fan state
-    }
-    else // If fan is OFF
-    {
-        printf("Fan: %s\t", state[1]); // Print fan state
-    }
-    if(SPKLR) // If speaker is ON
-    {
-        printf("\n\rSpeaker: %s\n\r", state[0]); // Print speaker state
-    }
-    else // If speaker is OFF
-    {
-        printf("\n\rSpeaker: %s\n\r", state[1]); // Print speaker state
-    }
-    printf("\n\r");
-    printf("Vent\n\r");
-    printf("Set Position: %d,\tCurrent Position: %d\n\r", vent.setposition, vent.currentposition); // Print stepper motor positions
-    printf("Data Pattern: %x\n\r", vent.patterncount); // Print current pattern of the stepper motor
-    
-    
+    printf("LL: %3d%cC,\tLL: %3d%%,\tLL: %3dppm\n", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
 
 }// eo DisplayData::
 
@@ -479,189 +435,29 @@ void main( void )
     char startup = 0;
     float rawADC = 0;
     float volts = 0;
-
-    IntializePBS(&pbs); // Initialize push button sensor
-    IntializeStepper(&vent); // Initialize stepper motor
-    pbs.pbstate = PBSTATE; // Initialize push button state
-    for(startup = 0; startup < SENSORCOUNT; startup++)
-    {
-        InitializeSensor(&sensorCh[startup]); // Initialize each sensor
-        switch (startup)
-        {
-            case 0: // Temperature Sensor
-                sensorCh[startup].Llimit = -10; // Set lower limit for temperature
-                sensorCh[startup].Hlimit = 85; // Set upper limit for temperature
-                break;
-
-            case 1: // Humidity Sensor
-                sensorCh[startup].Llimit = 20; // Set lower limit for humidity
-                sensorCh[startup].Hlimit = 80; // Set upper limit for humidity
-                break;
-            
-            case 2: // CO2 Sensor
-                sensorCh[startup].Llimit = 600; // Set lower limit for CO2 ppm
-                sensorCh[startup].Hlimit = 2000; // Set upper limit for CO2 ppm
-                break;
-            
-            default:
-                break;
-        }
-    }
-
-    IntializeStepper(&vent); // Initialize stepper motor
-    IntializePBS(&pbs); // Initialize push button sensor
+    float tempC = 0;
+    float rh = 0;
+    float ppm = 0;
 
 	SystemInitialization(); // Initialize system
     
     while(1)
     {
-        if(TMR0FLAG)
+	    if(TMR0FLAG)
         {
             resetTMR0(PRESENTCOUNT); // Reset Timer0
-            second++; // Increment second counter
-            if(second == ONSEC)
+            if(OBJECTDETECTED == TRUE)
             {
-				DisplayData(); // Display sensor data
-                second = 0; // Reset second counter
-                for(sensorindex = 0; sensorindex < SENSORCOUNT; sensorindex++)
-                {
-                    sensorCh[sensorindex].sample[sensorCh[sensorindex].insert] = getADCSample(sensorindex); // Get ADC sample
-                    sensorCh[sensorindex].insert++; // Increment insert index
-                    if(sensorCh[sensorindex].insert >= SAMPLE_SIZE)
-                    {
-                        sensorCh[sensorindex].insert = 0; // Reset insert index if it exceeds sample size
-                        sensorCh[sensorindex].avgReady = TRUE; // Set average ready flag
-                    }
-                    if(sensorCh[sensorindex].avgReady)
-                    {
-                        char index;
-                        long sum = 0;
-                        for(index = 0; index < SAMPLE_SIZE; index++)
-                        {
-                            sum += sensorCh[sensorindex].sample[index]; // Calculate sum of samples
-                        }
-                        rawADC = (float)sum / SAMPLE_SIZE; // Calculate raw ADC value 
-                        volts  = rawADC * ADCRESOLUTION; // Convert raw ADC value to volts
-                        switch(sensorindex)
-                        {
-                            case 0: // Temperature Sensor
-                                sensorCh[sensorindex].average = (int)((volts - TEMPB) / TEMPM); // Calculate average temperature in Celsius
-                                break;
-                            case 1: // Humidity Sensor
-                                sensorCh[sensorindex].average = (int)(volts / HUMIDM); // Calculate average humidity
-                                break;
-                            case 2: // CO2 Sensor
-                                sensorCh[sensorindex].average = (int)(volts / CO2M); // Calculate average CO2 ppm
-                                break;
-                            default:
-                                break;
-                        }
-					}
-                }
-            }
-
-            if(sensorCh[0].average > sensorCh[0].Hlimit) // If temperature exceeds high limit
-            {
-                COOLER = ON; // Turn off cooler
-                HEATER = OFF; // Turn off heater
-                FAN = ON; // Turn on fan
-                vent.setposition = 90; // Set stepper motor position to 90 degrees
-            }
-            else if(sensorCh[0].average < sensorCh[0].Llimit) // If temperature is below low limit
-            {
-                COOLER = OFF; // Turn off cooler
-                HEATER = ON; // Turn on heater
-                FAN = ON; // Turn on fan
-                vent.setposition = 6; // Set stepper motor position to 6 degrees
-            }
-            else // If temperature is within limits
-            {
-                COOLER = OFF; // Turn off cooler
-                HEATER = OFF; // Turn off heater
-                FAN = OFF; // Turn off fan
-            }
-            if(sensorCh[1].average > sensorCh[1].Hlimit) // If humidity exceeds high limit
-            {
-                SPKLR = OFF;
-                vent.setposition = 66; // Set stepper motor position to 90 degrees
-            }
-            else if(sensorCh[1].average < sensorCh[1].Llimit) // If humidity is below low limit
-            {
-                SPKLR = ON; // Turn off lighting
-                vent.setposition = 12; // Set stepper motor position to 6 degrees
+                HEATER = ON; // Turn on heater if object is detected
+                printf("\033[2J \033[H"); // Clear screen
+                printf("Object Detected!\n\r");
             }
             else
             {
-                SPKLR = OFF; // Turn off lighting
+                HEATER = OFF; // Turn off heater if no object is detected
+                printf("\033[2J \033[H"); // Clear screen
+                printf("No Object Detected!\n\r");
             }
-
-            if(sensorCh[2].average > sensorCh[2].Hlimit) // If CO2 exceeds high limit
-            {
-                FAN = ON; // Turn on fan
-                vent.setposition = 9; // Set stepper motor position to 90 degrees
-            }
-            else if(sensorCh[2].average < sensorCh[2].Llimit) // If CO2 is below low limit
-            {
-                FAN = ON; // Turn on fan
-                vent.setposition = 90; // Set stepper motor position to 6 degrees
-            }
-            else
-            {
-                // Do nothing if CO2 is within limits
-            }
-
-            if(vent.setposition > vent.currentposition)
-            {
-                vent.patterncount++; // Increment pattern count
-                if(vent.patterncount >= PATTERNCOUNT) // If pattern count exceeds number of patterns
-                {
-                    vent.patterncount = 0; // Reset pattern count
-                }
-                vent.currentpattern = stpmotorarr[vent.patterncount]; // Get next pattern
-                vent.currentposition = vent.currentposition + STEP; // Move stepper motor forward
-                STEPPERPORT = vent.currentpattern & STEPPERMASK; // Set stepper motor port
-            }
-            else if(vent.setposition < vent.currentposition)
-            {
-                vent.patterncount--; // Decrement pattern count
-                if(vent.patterncount < 0) // If pattern count is less than 0
-                {
-                    vent.patterncount = PATTERNCOUNT - 1; // Reset to last pattern
-                }
-                vent.currentpattern = stpmotorarr[vent.patterncount]; // Get previous pattern
-                vent.currentposition = vent.currentposition - STEP; // Move stepper motor backward
-                STEPPERPORT = vent.currentpattern & STEPPERMASK; // Set stepper motor port
-            }
-    } // End of Timer0 interrupt handling
-
-    pbs.pbstate = PBSTATE; // Update push button state
-
-    if(pbs.pbstate != pbs.laststate) // If push button state has changed
-    {
-        pbs.laststate = pbs.pbstate; // Update last state
-        switch (pbs.pbstate)
-        {
-            case MODEPRESS: // If MODE button is pressed
-                ChangeMode(); // Change mode
-                break;
-            case CHANNELPRESS: // If CHANNEL button is pressed
-                ChangeChannel(); // Change channel
-                break;
-            case INCREASE: // If INCREASE button is pressed
-                IncreaseLimit(); // Increase limit
-                break;
-            case DECREASE: // If DECREASE button is pressed
-                DecreaseLimit(); // Decrease limit
-                break;
-            default:
-                break; // Do nothing for other states
         }
     }
-    
-    if(pbs.pbstate == NOPRESS) // If no button is pressed
-    {
-        pbs.laststate = NOPRESS; // Update last state
-    }
-
-    }// End of while(1) loop
-} // eo main::
+}    
