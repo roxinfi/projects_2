@@ -1,14 +1,17 @@
 /*Use of AI / Cognitive Assistance Software is not allowed in any evaluation, assessment or exercise.*/
 /*=============================================================================
-	File Name:	ELNC6011LAB1.c  
+	File Name:	ELNC6011LAB3.c  
 	Author:		Vraj Patel
 	Date:		05/27/2025
 	Modified:	None
 	© Fanshawe College, 2025
 
-	Description: Purppose of the code is it will allow the operator to collect samplaing from multiple sensors on
+	Description: Purppose of the code is it will allow the operator to collect sample from multiple sensors on
 				on a timed interval. Furthermore, the code will also collect and filter and average the collected data 
-				for appropriate system action. 
+				for appropriate system action. various buttons are used to change the mode of sensor(High/Low limit), 
+                change the channel of the sensor, increase or decrease the high/low limit of the selected channel.
+                futhermore, the code will also control the stepper motor to open or close the vent based on the sensor readings.
+
 =============================================================================*/
 
 /* Preprocessor ===============================================================
@@ -30,41 +33,41 @@
 #include <p18f45k22.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <delays.h>
 
 // Constants  =================================================================
-#define TRUE	1	// True value for boolean
-#define FALSE	0 // False value for boolean
-#define TMR0FLAG    INTCONbits.TMR0IF // Timer 0 flag
-#define PRESENTCOUNT 15536 // Preset count for Timer 0
+#define TRUE    1	// True value for boolean
+#define FALSE   0 // False value for boolean
+#define TMR0FLAG    INTCONbits.TMR0IF // Timer 0 rollover flag
+#define PRESENTCOUNT    15536 // Preset count for Timer 0
 #define SAMPLE_SIZE 10 // Number of samples to be taken
 #define SENSORCOUNT 3 // Number of sensors
-#define ON 0xFF // ON state for devices
+#define ON  0xFF // ON state for devices
 #define OFF 0x00 // OFF state for devices
-#define PBMASK 0xF0 // Mask for push button state
+#define PBMASK  0xF0 // Mask for push button state
 #define NOPRESS    0xF0 // No press state for push button
-#define MODEPRESS	0xE0 // Mode button press state
-#define	CHANNELPRESS	0xD0 // Channel button press state
+#define MODEPRESS	0xE0 // Mode button press state(High/Low limit)
+#define	CHANNELPRESS	0xD0 // Channel button press state(Temperature/Humidity/CO2)
 #define	INCREASE	0x70 // Increase button press state
 #define	DECREASE	0XB0 // Decrease button press state
-#define PBSTATE (PORTA & PBMASK) // Push button state
-#define ADCRESOLUTION  (5.0f/1023.0f)   //  a true float value of (0.0048876)
+#define PBSTATE     (PORTA & PBMASK) // Push button state
+#define ADCRESOLUTION  (5.0f/1024.0f)   //  a true float value of (0.0048876)
 #define TEMPB           0.5f           // Temperature offset in volts
 #define TEMPM           0.01f          // Temperature multiplier (°C per volt)
 #define HUMIDM          0.05f          // Humidity multiplier (fraction per volt)
 #define CO2M            0.000345833f    // CO2 multiplier (volts per ppm)
 #define DEBOUNCE_DELAY  10             // milliseconds of debounce
-#define ONSEC           10              // “1 second” worth of Timer0 overflows
-#define DEGREE 	248 // Character for degree symbol
-#define PATTERNCOUNT 4 // Number of patterns for stepper motor
-#define LIGHTING LATCbits.LATC0 // Fan control pin
-#define COOLER LATCbits.LATC1 // Cooler control pin
-#define HEATER LATCbits.LATC2 // Heater control pin
+#define ONSEC   10              // “1 second” worth of Timer0 overflows
+#define DEGREE  248 // Character for degree symbol (°)
+#define PATTERNCOUNT    4 // Number of patterns for stepper motor
+#define LIGHTING    LATCbits.LATC0 // Fan control pin
+#define COOLER  LATCbits.LATC1 // Cooler control pin
+#define HEATER  LATCbits.LATC2 // Heater control pin
 #define FAN LATCbits.LATC3 // Fan control pin
-#define SPKLR LATCbits.LATC4 // Speaker control pin
-#define STEP 3 // Stepper motor step count
+#define  SPKLR   LATCbits.LATC4 // Speaker control pin
+#define STEP    3 // Stepper motor step count
 #define STEPPERPORT LATB // Port for stepper motor control
-#define STEPPERMASK 0x0F // Mask for stepper motor control pins
+#define STEPPERMASK 0x0F // Mask for stepper motor control pins 
+#define GREENHOUSEID 437 // Greenhouse system ID
 
 
 // Global Variables  ==========================================================
@@ -111,7 +114,7 @@ char state[2][4] = {"ON ", "OFF"}; // State of the devices (ON/OFF)
 // Functions  =================================================================
 
 
-/*>>> OSConfig: ===========================================================
+/*>>> oscConfig: ===========================================================
 Author:		Patel Vraj
 Date:		05/11/2024
 Modified:	13/05/2025
@@ -120,14 +123,14 @@ Desc:		This function will configure internal oscillator of PIC18F45K22 to
 Input: 		None.
 Returns:	None.
  ============================================================================*/
-void OSConfig(void)
+void oscConfig(void)
 {
 	OSCCON = 0x52; 
 	while(!OSCCONbits.HFIOFS);
-} // eo OSConfig::
+} // eo oscConfig::
 
 
-/*>>> ConfigIO: ===========================================================
+/*>>> configIO: ===========================================================
 Author:		Patel Vraj
 Date:		05/11/2024
 Modified:	13/05/2025
@@ -136,19 +139,19 @@ Desc:		This function will configure the I/O pins as input and output state accor
 Input: 		None.
 Returns:	None.
  ============================================================================*/
-void ConfigIO(void)
+void configIO(void)
 {
-	ANSELA = 0x07;
+	ANSELA = 0x07; // Configure AN0-AN2 as analog inputs
 	LATA   = 0x00;
 	TRISA  = 0xFF;
 
 	ANSELB = 0x00;
 	LATB   = 0x00;
-	TRISB  = 0xF0;
+	TRISB  = 0xF0; // Configure RB0-RB3 as output
 
 	ANSELC = 0x00;
 	LATC   = 0x00;
-	TRISC  = 0xF0;
+	TRISC  = 0xF0; // Configure RC0-RC4 as output
 
 	ANSELD = 0x00;
 	LATD   = 0x00;
@@ -157,9 +160,9 @@ void ConfigIO(void)
 	ANSELE = 0x00;
 	LATE   = 0x00;
 	TRISE  = 0xFF;
-} // eo ConfigIO::
+} // eo configIO::
 
-/*>>> ConfigADC: ===========================================================
+/*>>> configADC: ===========================================================
 Author:		Vraj Patel
 Date:		05/11/2024
 Modified:	13/05/2025
@@ -168,12 +171,12 @@ Desc:		This functions configures the ADC module to 12TAD, right justified , Fosc
 Input: 		None.
 Returns:	None.
  ============================================================================*/
-void ConfigADC(void)
+void configADC(void)
 {
 	ADCON0 = 0x01;
 	ADCON1 = 0x00;
 	ADCON2 = 0xA9;
-} // eo ConfigADC::
+} // eo configADC::
 
 
 /*>>> resetTMR0: ===========================================================
@@ -227,7 +230,7 @@ int getADCSample(char adcChnl)
 	return ADRES;
 } // eo getADCSample::
 
-/*>>> InitializeSensor: ========================================
+/*>>> initializeSensor: ========================================
 Author:		Vraj Patel
 Date:		05/13/2025
 Modified:	None
@@ -235,7 +238,7 @@ Desc:		This function will calculate the average of the samples taken from the se
 Input: 		sensorCh_t *sensorCh, pointer to the sensor channel structure.
 Returns:	None
  ============================================================================*/
-void InitializeSensor(sensor_t *sensorCh)
+void initializeSensor(sensor_t *sensorCh)
 {
     int index;
     for(index = 0; index < SAMPLE_SIZE; index++)
@@ -248,11 +251,11 @@ void InitializeSensor(sensor_t *sensorCh)
     sensorCh->Hlimit = 0; // Initialize upper limit to 0
     sensorCh->average = 0; // Initialize average to 0
 
-} // eo InitializeSensor::
+} // eo initializeSensor::
 
 
 
-/*>>> IntializeStepper: ========================================
+/*>>> intializeStepper: ========================================
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
@@ -260,16 +263,16 @@ Desc:		This function will initialize the stepper motor structure with default va
 Input: 		stepper_t *stepper, pointer to the stepper motor structure.
 Returns:	None
 ============================================================================*/
-void IntializeStepper(stepper_t *stepper)
+void intializeStepper(stepper_t *stepper)
 {
     stepper->currentpattern = 0x01; // Start with the first pattern
     stepper->patterncount = 0; // Total number of patterns
     stepper->currentposition = 0; // Start at position 0
     stepper->setposition = 0; // Set desired position to 0
     stepper->movingflag = FALSE; // Motor is not moving initially
-}// eo IntializeStepper::
+}// eo intializeStepper::
 
-/*>>> IntializePBS: ========================================
+/*>>> intializePbs: ========================================
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
@@ -277,13 +280,13 @@ Desc:		This function will initialize the push button sensor structure with defau
 Input: 		pbs_t *pbs, pointer to the push button sensor structure.
 Returns:	None
 ============================================================================*/
-void IntializePBS(pbs_t *pbs)
+void intializePbs(pbs_t *pbs)
 {
     pbs->channelselect = 0; // Default channel selection
     pbs->mode = 0; // Default mode
     pbs->pbstate = OFF; // Push button state is off initially
     pbs->laststate = PBMASK; // Last state of the push button is masked
-}// eo IntializePBS::
+}// eo intializePbs::
 
 /*>>> ChangeMode: ===========================================================
 Author:		Vraj Patel
@@ -298,7 +301,7 @@ void ChangeMode(void)
     pbs.mode = !pbs.mode; // Toggle mode between high and low limit
 }// eo ChangeMode::
 
-/*>>> ChangeChannel: ===========================================================
+/*>>> changeChannel: ===========================================================
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
@@ -306,16 +309,16 @@ Desc:		This function will change the senesor channel based on the push button st
 Input: 		None
 Returns:	None
  ============================================================================*/
-void ChangeChannel(void)
+void changeChannel(void)
 {
     pbs.channelselect++; // Increment channel selection
     if(pbs.channelselect >= SENSORCOUNT) // If it exceeds the number of sensors
     {
         pbs.channelselect = 0; // Reset to first sensor
     }
-}// eo ChangeChannel::
+}// eo changeChannel::
 
-/*>>> IncreaseLimit: ===========================================================
+/*>>> increaseLimit: ===========================================================
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
@@ -323,7 +326,7 @@ Desc:		This function will increase the high or low limit of the selected sensor 
 Input: 		None
 Returns:	None
  ============================================================================*/
-void IncreaseLimit(void)
+void increaseLimit(void)
 {
     char ch = pbs.channelselect; // Get the selected channel
     
@@ -335,9 +338,9 @@ void IncreaseLimit(void)
     {
         sensorCh[ch].Hlimit++;
     }
-}// eo IncreaseLimit::
+}// eo increaseLimit::
 
-/*>>> DecreaseLimit: ===========================================================
+/*>>> decreaseLimit: ===========================================================
 Author:		Vraj Patel
 Date:		05/27/2025
 Modified:	None
@@ -345,7 +348,7 @@ Desc:		This function will decrease the high or low limit of the selected sensor 
 Input: 		None
 Returns:	None
  ============================================================================*/
-void DecreaseLimit(void)
+void decreaseLimit(void)
 {
     int ch = pbs.channelselect;
 
@@ -358,22 +361,23 @@ void DecreaseLimit(void)
     {
         sensorCh[ch].Hlimit--;
     }
-}// eo DecreaseLimit::
+}// eo decreaseLimit::
 
-/* >>>DisplayData: ===========================================================
+/* >>>displayData: ===========================================================
 Author:		Vraj Patel
 Date:		05/27/2025
-Modified:	None
+Modified:	07/08/2025
 Desc:		This function will display the data from the sensors on the serial port via USART1.
             It will print the selected channel, mode, sensor averages, high and low limits,
             and the state of the heater, cooler, fan, and speaker.
 Input: 		None
 Returns:	None
     ============================================================================*/
-void DisplayData(void)
+void displayData(void)
 {
-	printf("\033[2J \033[H"); // Clear screen
-	printf("Sensor System (437)\n\n\r");
+	printf("\033[H\033[2J"); // Clear screen
+	printf("Greenhouse Control System %i\n\r", GREENHOUSEID); // Print system ID
+    printf("\n\r");
     printf("Channel: %d", pbs.channelselect); // Print selected channel
     if(pbs.mode == 0) // If mode is low limit
     {
@@ -383,10 +387,10 @@ void DisplayData(void)
     {
         printf("\tMode: High Limit\n\r");
     }
-        printf("\n\r");
-    printf("Temperature: %3d%cC,\tHumidity: %3d%%,\tCO2: %3dppm\n\r", sensorCh[0].average, DEGREE, sensorCh[1].average, sensorCh[2].average); // Print sensor averages           
-    printf("HL: %3d%cC,\tHL: %3d%%,\tHL: %3dppm\n\r", sensorCh[0].Hlimit, DEGREE, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
-    printf("LL: %3d%cC,\tLL: %3d%%,\tLL: %3dppm\n\r", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
+    printf("\n\r");
+    printf("Temperature:%3d°C,\tHumidity:%3d%%,\t\tCO2:%3dppm\n\r", sensorCh[0].average, sensorCh[1].average, sensorCh[2].average); // Print sensor averages           
+    printf("HL: %3d%cC,\t\tHL: %3d%%,\t\tHL: %3dppm\n\r", sensorCh[0].Hlimit, DEGREE, sensorCh[1].Hlimit, sensorCh[2].Hlimit); // Print high limit values
+    printf("LL: %3d%cC,\t\tLL: %3d%%,\t\tLL: %3dppm\n\r", sensorCh[0].Llimit, DEGREE, sensorCh[1].Llimit, sensorCh[2].Llimit); // Print low limit values
     printf("\n\r");
 
     if(HEATER) // If heater is ON
@@ -415,20 +419,18 @@ void DisplayData(void)
     }
     if(SPKLR) // If speaker is ON
     {
-        printf("\n\rSpeaker: %s\n\r", state[0]); // Print speaker state
+        printf("\n\rSpeaker: %s\t", state[0]); // Print speaker state
     }
     else // If speaker is OFF
     {
-        printf("\n\rSpeaker: %s\n\r", state[1]); // Print speaker state
+        printf("\n\rSpeaker: %s\t", state[1]); // Print speaker state
     }
+    printf("Lighting: ON\n\r"); // Print lighting state
     printf("\n\r");
     printf("Vent\n\r");
     printf("Set Position: %d,\tCurrent Position: %d\n\r", vent.setposition, vent.currentposition); // Print stepper motor positions
     printf("Data Pattern: %x\n\r", vent.patterncount); // Print current pattern of the stepper motor
-    
-    
-
-}// eo DisplayData::
+}// eo displayData::
 
 /*>>> configSP1: ===========================================================
 Author:		Vraj Patel
@@ -458,11 +460,11 @@ Desc:		This function will be called in the main for intialization
 Input: 		None.
 Returns:	None.
  ============================================================================*/
-void SystemInitialization(void)
+void systemInitialization(void)
 {
-    OSConfig(); // Configure oscillator
-    ConfigIO(); // Configure I/O pins
-    ConfigADC(); // Configure ADC
+    oscConfig(); // Configure oscillator
+    configIO(); // Configure I/O pins
+    configADC(); // Configure ADC
     configSP1(); // Configure Serial Port 1
     configTMR0(PRESENTCOUNT); // Configure Timer0
 } // eo SystemInitialization::
@@ -474,33 +476,33 @@ void SystemInitialization(void)
  ============================================================================*/
 void main( void )
 {
-	char second = 0;
-    char sensorindex = 0;
-    char startup = 0;
-    float rawADC = 0;
-    float volts = 0;
+	char second = 0; // Second counter for Timer0
+    char sensorindex = 0; // Index for sensor channels
+    char startup = 0; // Startup index for initialization of sensors
+    float rawADC = 0; // Raw ADC value
+    float volts = 0; // Voltage value from ADC
 
-    IntializePBS(&pbs); // Initialize push button sensor
-    IntializeStepper(&vent); // Initialize stepper motor
+    intializePbs(&pbs); // Initialize push button sensor
+    intializeStepper(&vent); // Initialize stepper motor
     pbs.pbstate = PBSTATE; // Initialize push button state
     for(startup = 0; startup < SENSORCOUNT; startup++)
     {
-        InitializeSensor(&sensorCh[startup]); // Initialize each sensor
+        initializeSensor(&sensorCh[startup]); // Initialize each sensor
         switch (startup)
         {
             case 0: // Temperature Sensor
-                sensorCh[startup].Llimit = -10; // Set lower limit for temperature
-                sensorCh[startup].Hlimit = 85; // Set upper limit for temperature
+                sensorCh[startup].Llimit = 15; // Set lower limit for temperature
+                sensorCh[startup].Hlimit = 35; // Set upper limit for temperature
                 break;
 
             case 1: // Humidity Sensor
-                sensorCh[startup].Llimit = 20; // Set lower limit for humidity
-                sensorCh[startup].Hlimit = 80; // Set upper limit for humidity
+                sensorCh[startup].Llimit = 35; // Set lower limit for humidity
+                sensorCh[startup].Hlimit = 65; // Set upper limit for humidity
                 break;
             
             case 2: // CO2 Sensor
-                sensorCh[startup].Llimit = 600; // Set lower limit for CO2 ppm
-                sensorCh[startup].Hlimit = 2000; // Set upper limit for CO2 ppm
+                sensorCh[startup].Llimit = 650; // Set lower limit for CO2 ppm
+                sensorCh[startup].Hlimit = 1400; // Set upper limit for CO2 ppm
                 break;
             
             default:
@@ -508,10 +510,10 @@ void main( void )
         }
     }
 
-    IntializeStepper(&vent); // Initialize stepper motor
-    IntializePBS(&pbs); // Initialize push button sensor
+    intializeStepper(&vent); // Initialize stepper motor
+    intializePbs(&pbs); // Initialize push button sensor
 
-	SystemInitialization(); // Initialize system
+	systemInitialization(); // Initialize system
     
     while(1)
     {
@@ -521,7 +523,7 @@ void main( void )
             second++; // Increment second counter
             if(second == ONSEC)
             {
-				DisplayData(); // Display sensor data
+				displayData(); // Display sensor data
                 second = 0; // Reset second counter
                 for(sensorindex = 0; sensorindex < SENSORCOUNT; sensorindex++)
                 {
@@ -560,6 +562,7 @@ void main( void )
                 }
             }
 
+            // Check temperature and control cooler, heater, and fan
             if(sensorCh[0].average > sensorCh[0].Hlimit) // If temperature exceeds high limit
             {
                 COOLER = ON; // Turn off cooler
@@ -580,6 +583,8 @@ void main( void )
                 HEATER = OFF; // Turn off heater
                 FAN = OFF; // Turn off fan
             }
+
+            // Check humidity and control speaker and vent
             if(sensorCh[1].average > sensorCh[1].Hlimit) // If humidity exceeds high limit
             {
                 SPKLR = OFF;
@@ -592,9 +597,10 @@ void main( void )
             }
             else
             {
-                SPKLR = OFF; // Turn off lighting
+                SPKLR = OFF; // Turn off speaker
             }
 
+            // Check CO2 levels and control fan and vent
             if(sensorCh[2].average > sensorCh[2].Hlimit) // If CO2 exceeds high limit
             {
                 FAN = ON; // Turn on fan
@@ -645,13 +651,13 @@ void main( void )
                 ChangeMode(); // Change mode
                 break;
             case CHANNELPRESS: // If CHANNEL button is pressed
-                ChangeChannel(); // Change channel
+                changeChannel(); // Change channel
                 break;
             case INCREASE: // If INCREASE button is pressed
-                IncreaseLimit(); // Increase limit
+                increaseLimit(); // Increase limit
                 break;
             case DECREASE: // If DECREASE button is pressed
-                DecreaseLimit(); // Decrease limit
+                decreaseLimit(); // Decrease limit
                 break;
             default:
                 break; // Do nothing for other states
