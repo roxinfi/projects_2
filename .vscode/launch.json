@@ -44,16 +44,6 @@
           "ignoreFailures": true
         }
       ]
-<<<<<<< Updated upstream
-=======
-    },
-    {
-      "name": "Launch HTML in Browser",
-      "type": "pwa-msedge", // or "pwa-chrome"
-      "request": "launch",
-      "file": "${workspaceFolder}/index.html",
-      "webRoot": "${workspaceFolder}"
->>>>>>> Stashed changes
     }
   ],
   "version": "2.0.0"

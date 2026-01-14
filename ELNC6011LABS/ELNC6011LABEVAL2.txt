@@ -1,0 +1,14 @@
+void execute()
+{
+    printf("\033[H\033[2J");
+    printf("%s", tokens[CONLIM]);
+    printf("\n\r%i", atoi(tokens[TOADDY]));
+    printf("\n\r%i", atoi(tokens[MYADDY]));
+    printf("\n\r%i", atoi(tokens[CHID]));
+    printf("\n\r%i", atoi(tokens[MODE]));
+    printf("\n\r%i", atoi(tokens[NEWVAL]));
+}
+
+OSCON = 0x62;
+while(!OSCONbits.HFIOFS);
+
